@@ -1,75 +1,70 @@
+local success, Fluent = pcall(function()
+    return loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+end)
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local VirtualUser = game:GetService("VirtualUser")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local Lighting = game:GetService("Lighting")
+local TeleportService = game:GetService("TeleportService")
+
 getgenv().Config = {
     FastAttack = false,
     AttackDelay = 0.04,
     HitboxSize = 60,
     AutoHaki = false,
     UseSkills = true,
-    
+    AutoObsV2 = false,
+    AutoBuyLegendaryHaki = false,
     AutoFarm = false,
-    AutoQuest = false,
+    AutoQuest = true,
     BringMob = false,
     BringRadius = 350,
     HoverHeight = 16,
     AutoEquip = true,
     Weapon = "Melee",
     AutoChest = false,
-    
     AutoRaid = false,
     SelectedChip = "Flame",
+    AutoAwakening = false,
     AutoFactory = false,
     AutoSeaBeast = false,
-    
     AutoSeaEvent = false,
     AutoKitsune = false,
     AutoLeviathan = false,
     AutoVolcanic = false,
     BoatSpeed = 300,
-    
     AutoV4 = false,
     AutoTryV4 = false,
-    NoFog = false,
-    
     AutoCDK = false,
     AutoSoulGuitar = false,
     AutoSharkAnchor = false,
     AutoHallowScythe = false,
     AutoMastery600 = false,
-    AutoYamaTushita = false,
-    AutoRainbowHaki = false,
-    AutoSogita = false,
-    AutoAutoChestHop = false,
-    AutoBountyHunter = false,
-    
-    AutoObsV2 = false,
-    AutoBuyLegendaryHaki = false,
-    
     AutoStats = false,
     StatTarget = "Melee",
-    
     WalkSpeedBoost = false,
     SpeedValue = 100,
     JumpPowerBoost = false,
     JumpValue = 100,
     InfiniteJump = false,
     NoClip = false,
-    
     PlayerESP = false,
     ItemESP = false,
     MobESP = false,
-    IslandESP = false,
-    FruitNotifier = false,
-    
     FPSBooster = false,
     DisableTextures = false,
     WhiteScreen = false,
-    
     SelectedIsland = "Floating Turtle",
-    TweenSpeed = 300
-}
-
-local QuestState = {
-    CurrentMobName = " QuestDatabase",
-    CurrentMobCFrame = nil
+    TweenSpeed = 300,
+    AntiAFK = true,
+    NoFog = false
 }
 
 local IslandLocations = {
@@ -102,9 +97,12 @@ local IslandLocations = {
     ["Haunted Castle"] = CFrame.new(-9515, 145, 5785),
     ["Sea of Treats"] = CFrame.new(-2025, 50, -12150),
     ["Tiki Outpost"] = CFrame.new(-16540, 55, 1050),
-    ["Hungry Man"] = CFrame.new(-11993, 336, -8840),
-    ["Master of Enhancement"] = CFrame.new(511, 45, 1785),
     ["Clock/Trial Room"] = CFrame.new(28200, 14200, 10500)
+}
+
+local QuestState = {
+    CurrentMobName = "",
+    CurrentMobCFrame = nil
 }
 
 local QuestDatabase = {
@@ -186,71 +184,37 @@ local function GetQuestDataByLevel()
     local dataFolder = LocalPlayer:FindFirstChild("Data")
     local levelObj = dataFolder and dataFolder:FindFirstChild("Level")
     if not levelObj then return nil end
-
     local currentLevel = levelObj.Value
     local selectedQuest = QuestDatabase[1]
-
     for _, quest in ipairs(QuestDatabase) do
         if currentLevel >= quest.MinLevel then
             selectedQuest = quest
         end
     end
-
     return selectedQuest
 end
 
-task.spawn(function()
-    while task.wait(0.5) do
-        pcall(function()
-            if not getgenv().Config.AutoQuest then 
-                QuestState.CurrentMobName = ""
-                QuestState.CurrentMobCFrame = nil
-                return 
-            end
-
-            local questData = GetQuestDataByLevel()
-            if not questData then return end
-
-            QuestState.CurrentMobName = questData.MobName
-            QuestState.CurrentMobCFrame = questData.Mob_CFrame
-
-            local mainGui = PlayerGui:FindFirstChild("Main")
-            local questFrame = mainGui and mainGui:FindFirstChild("Quest")
-
-            if questFrame and not questFrame.Visible then
-                local char = LocalPlayer.Character
-                local hrp = char and char:FindFirstChild("HumanoidRootPart")
-                
-                if hrp then
-                    hrp.CFrame = questData.NPC_CFrame
-                    task.wait(0.2)
-
-                    local remotes = ReplicatedStorage:FindFirstChild("Remotes")
-                    local commF = remotes and remotes:FindFirstChild("CommF_")
-                    if commF then
-                        commF:InvokeServer("StartQuest", questData.QuestName, questData.QuestIndex)
-                    end
-                end
-            elseif questFrame and questFrame.Visible then
-                local container = questFrame:FindFirstChild("Container")
-                local questTitle = container and container:FindFirstChild("QuestTitle")
-                local titleLabel = questTitle and questTitle:FindFirstChild("Title")
-
-                if titleLabel and not string.find(titleLabel.Text, questData.MobName) then
-                    local remotes = ReplicatedStorage:FindFirstChild("Remotes")
-                    local commF = remotes and remotes:FindFirstChild("CommF_")
-                    if commF then
-                        commF:InvokeServer("AbandonQuest")
-                    end
-                end
-            end
-        end)
+local CurrentTween = nil
+local function StopTween()
+    if CurrentTween then 
+        CurrentTween:Cancel() 
+        CurrentTween = nil 
     end
-end)
+end
 
-local CombatFramework = nil
-local CombatFrameworkR = nil
+local function TweenTo(targetCFrame)
+    local char = LocalPlayer.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    local hrp = char.HumanoidRootPart
+    local dist = (hrp.Position - targetCFrame.Position).Magnitude
+    if dist < 10 then return end
+    StopTween()
+    local info = TweenInfo.new(dist / getgenv().Config.TweenSpeed, Enum.EasingStyle.Linear)
+    CurrentTween = TweenService:Create(hrp, info, { CFrame = targetCFrame })
+    CurrentTween:Play()
+end
 
+local CombatFramework, CombatFrameworkR = nil, nil
 pcall(function()
     CombatFramework = require(LocalPlayer.PlayerScripts:WaitForChild("CombatFramework"))
     CombatFrameworkR = debug.getupvalues(CombatFramework)[2]
@@ -259,9 +223,7 @@ end)
 local function GetCurrentBlade()
     if not CombatFrameworkR then return nil end
     local AC = CombatFrameworkR.activeController
-    if AC and AC.blades and #AC.blades > 0 then
-        return AC.blades[1]
-    end
+    if AC and AC.blades and #AC.blades > 0 then return AC.blades[1] end
     return nil
 end
 
@@ -269,537 +231,12 @@ local function EquipWeapon(toolType)
     local char = LocalPlayer.Character
     local hum = char and char:FindFirstChild("Humanoid")
     if not hum then return end
-
     for _, tool in pairs(LocalPlayer.Backpack:GetChildren()) do
         if tool:IsA("Tool") and (tool.ToolTip == toolType or tool.Name:find(toolType)) then
             hum:EquipTool(tool)
             break
         end
     end
-end
-
-local function CastSkills()
-    if not getgenv().Config.UseSkills then return end
-    local keys = {Enum.KeyCode.Z, Enum.KeyCode.X, Enum.KeyCode.C}
-    for _, key in ipairs(keys) do
-        VirtualInputManager:SendKeyEvent(true, key, false, game)
-        task.wait(0.05)
-        VirtualInputManager:SendKeyEvent(false, key, false, game)
-    end
-end
-
-task.spawn(function()
-    while true do
-        pcall(function()
-            if getgenv().Config.FastAttack and CombatFrameworkR then
-                local AC = CombatFrameworkR.activeController
-                if AC and AC.equipped then
-                    AC.attacking = false
-                    AC.blocking = false
-                    AC.timeToNextAttack = 0
-                    AC.timeToNextBlock = 0
-                    AC.increment = 3
-                    AC.hitboxMagnitude = getgenv().Config.HitboxSize
-                    
-                    local blade = GetCurrentBlade()
-                    if blade then
-                        AC:attack()
-                    end
-                end
-                
-                local Net = ReplicatedStorage:FindFirstChild("Modules") and ReplicatedStorage.Modules:FindFirstChild("Net")
-                if Net then
-                    local RegisterAttack = Net:FindFirstChild("RE/RegisterAttack")
-                    if RegisterAttack then
-                        RegisterAttack:FireServer(0)
-                    end
-                end
-            end
-        end)
-        task.wait(getgenv().Config.AttackDelay)
-    end
-end)
-
-task.spawn(function()
-    while task.wait(1) do
-        if getgenv().Config.AutoHaki then
-            pcall(function()
-                local char = LocalPlayer.Character
-                if char and not char:FindFirstChild("HasBuso") then
-                    local CommF = ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("CommF_")
-                    if CommF then
-                        CommF:InvokeServer("Buso")
-                    end
-                end
-            end)
-        end
-    end
-end)
-
-task.spawn(function()
-    while task.wait(0.15) do
-        pcall(function()
-            if getgenv().Config.BringMob and (getgenv().Config.AutoFarm or getgenv().Config.AutoRaid) then
-                local char = LocalPlayer.Character
-                local hrp = char and char:FindFirstChild("HumanoidRootPart")
-                if not hrp then return end
-
-                for _, enemy in pairs(workspace.Enemies:GetChildren()) do
-                    local enemyHum = enemy:FindFirstChild("Humanoid")
-                    local enemyHRP = enemy:FindFirstChild("HumanoidRootPart")
-                    
-                    if enemyHum and enemyHRP and enemyHum.Health > 0 then
-                        local isValidTarget = getgenv().Config.AutoRaid or (not getgenv().Config.AutoQuest) or (QuestState.CurrentMobName == "") or (enemy.Name == QuestState.CurrentMobName)
-                        
-                        if isValidTarget then
-                            local dist = (enemyHRP.Position - hrp.Position).Magnitude
-                            if dist <= getgenv().Config.BringRadius then
-                                enemyHum.WalkSpeed = 0
-                                enemyHum.JumpPower = 0
-                                enemyHRP.CanCollide = false
-                                enemyHRP.CFrame = hrp.CFrame * CFrame.new(0, 0, -10)
-                                
-                                if sethiddenproperty then
-                                    sethiddenproperty(LocalPlayer, "SimulationRadius", math.huge)
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-        end)
-    end
-end)
-
-task.spawn(function()
-    while task.wait() do
-        pcall(function()
-            local char = LocalPlayer.Character
-            local hrp = char and char:FindFirstChild("HumanoidRootPart")
-            local humanoid = char and char:FindFirstChild("Humanoid")
-            if not hrp or not humanoid then return end
-
-            if getgenv().Config.AutoFarm then
-                if getgenv().Config.AutoEquip then
-                    EquipWeapon(getgenv().Config.Weapon)
-                end
-
-                local target = nil
-                local shortestDist = math.huge
-                
-                for _, enemy in pairs(workspace.Enemies:GetChildren()) do
-                    local enemyHum = enemy:FindFirstChild("Humanoid")
-                    local enemyHRP = enemy:FindFirstChild("HumanoidRootPart")
-                    
-                    if enemyHum and enemyHRP and enemyHum.Health > 0 then
-                        local isValidTarget = (not getgenv().Config.AutoQuest) or (QuestState.CurrentMobName == "") or (enemy.Name == QuestState.CurrentMobName)
-                        if isValidTarget then
-                            local dist = (enemyHRP.Position - hrp.Position).Magnitude
-                            if dist < shortestDist then
-                                shortestDist = dist
-                                target = enemy
-                            end
-                        end
-                    end
-                end
-
-                if target and target:FindFirstChild("HumanoidRootPart") then
-                    humanoid.PlatformStand = true
-                    hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-                    hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-
-                    hrp.CFrame = target.HumanoidRootPart.CFrame * CFrame.new(0, getgenv().Config.HoverHeight, 0) * CFrame.Angles(math.rad(-90), 0, 0)
-                    
-                    if not getgenv().Config.FastAttack then
-                        VirtualUser:CaptureController()
-                        VirtualUser:Button1Down(Vector2.new(1280, 672))
-                    end
-                elseif getgenv().Config.AutoQuest and QuestState.CurrentMobCFrame then
-                    humanoid.PlatformStand = true
-                    hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-                    hrp.CFrame = QuestState.CurrentMobCFrame * CFrame.new(0, getgenv().Config.HoverHeight, 0)
-                else
-                    humanoid.PlatformStand = false
-                end
-            else
-                if humanoid.PlatformStand and not (getgenv().Config.AutoChest or getgenv().Config.AutoRaid or getgenv().Config.AutoFactory or getgenv().Config.AutoSeaBeast) then
-                    humanoid.PlatformStand = false
-                end
-            end
-        end)
-    end
-end)
-
-task.spawn(function()
-    while task.wait(0.3) do
-        pcall(function()
-            if not getgenv().Config.AutoSeaEvent then return end
-            local char = LocalPlayer.Character
-            local hrp = char and char:FindFirstChild("HumanoidRootPart")
-            if not hrp then return end
-
-            local seaFolder = workspace:FindFirstChild("SeaBeasts") or workspace:FindFirstChild("Enemies")
-            if seaFolder then
-                for _, mob in ipairs(seaFolder:GetChildren()) do
-                    if mob:FindFirstChild("HumanoidRootPart") and mob:FindFirstChild("Humanoid") and mob.Humanoid.Health > 0 then
-                        if getgenv().Config.AutoEquip then EquipWeapon("Melee") end
-                        hrp.CFrame = mob.HumanoidRootPart.CFrame * CFrame.new(0, 45, 0) * CFrame.Angles(math.rad(-90), 0, 0)
-                        CastSkills()
-                        break
-                    end
-                end
-            end
-        end)
-    end
-end)
-
-task.spawn(function()
-    while task.wait(0.4) do
-        pcall(function()
-            if not getgenv().Config.AutoVolcanic then return end
-            local char = LocalPlayer.Character
-            local hrp = char and char:FindFirstChild("HumanoidRootPart")
-            if not hrp then return end
-            
-            for _, enemy in ipairs(workspace.Enemies:GetChildren()) do
-                if string.find(enemy.Name, "Golem") or string.find(enemy.Name, "Magma") then
-                    if enemy:FindFirstChild("HumanoidRootPart") and enemy:FindFirstChild("Humanoid") and enemy.Humanoid.Health > 0 then
-                        hrp.CFrame = enemy.HumanoidRootPart.CFrame * CFrame.new(0, 20, 0) * CFrame.Angles(math.rad(-90), 0, 0)
-                        CastSkills()
-                        break
-                    end
-                end
-            end
-        end)
-    end
-end)
-
-RunService.Stepped:Connect(function()
-    pcall(function()
-        if getgenv().Config.NoFog then
-            Lighting.FogEnd = 9e9
-            for _, v in pairs(Lighting:GetChildren()) do
-                if v:IsA("Atmosphere") then
-                    v.Density = 0
-                end
-            end
-        end
-
-        if getgenv().Config.FPSBooster then
-            Lighting.GlobalShadows = false
-            settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
-        end
-    end)
-end)
-
-task.spawn(function()
-    while task.wait(2) do
-        pcall(function()
-            local CommF = ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("CommF_")
-            if not CommF then return end
-
-            if getgenv().Config.AutoBuyLegendaryHaki then
-                CommF:InvokeServer("ColorKey", "Buy")
-            end
-
-            if getgenv().Config.AutoObsV2 then
-                CommF:InvokeServer("BusoV2", "Buy")
-            end
-        end)
-    end
-end)
-
-task.spawn(function()
-    while task.wait(0.4) do
-        if getgenv().Config.AutoChest then
-            pcall(function()
-                local char = LocalPlayer.Character
-                local hrp = char and char:FindFirstChild("HumanoidRootPart")
-                if not hrp then return end
-
-                local nearestChest = nil
-                local shortestDist = math.huge
-
-                for _, obj in ipairs(workspace:GetDescendants()) do
-                    if obj:IsA("BasePart") and string.find(obj.Name, "Chest") then
-                        local dist = (obj.Position - hrp.Position).Magnitude
-                        if dist < shortestDist then
-                            shortestDist = dist
-                            nearestChest = obj
-                        end
-                    end
-                end
-
-                if nearestChest then
-                    hrp.CFrame = nearestChest.CFrame
-                end
-            end)
-        end
-    end
-end)
-
-task.spawn(function()
-    while task.wait(0.2) do
-        pcall(function()
-            if not getgenv().Config.AutoFactory then return end
-
-            local char = LocalPlayer.Character
-            local hrp = char and char:FindFirstChild("HumanoidRootPart")
-            local hum = char and char:FindFirstChild("Humanoid")
-            if not hrp or not hum then return end
-
-            local core = workspace.Enemies:FindFirstChild("Core")
-            if core and core:FindFirstChild("Humanoid") and core.Humanoid.Health > 0 and core:FindFirstChild("HumanoidRootPart") then
-                if getgenv().Config.AutoEquip then
-                    EquipWeapon(getgenv().Config.Weapon)
-                end
-                hum.PlatformStand = true
-                hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-                hrp.CFrame = core.HumanoidRootPart.CFrame * CFrame.new(0, getgenv().Config.HoverHeight, 0) * CFrame.Angles(math.rad(-90), 0, 0)
-                CastSkills()
-            end
-        end)
-    end
-end)
-
-task.spawn(function()
-    while task.wait(0.3) do
-        pcall(function()
-            if not getgenv().Config.AutoRaid then return end
-
-            local char = LocalPlayer.Character
-            local hrp = char and char:FindFirstChild("HumanoidRootPart")
-            local hum = char and char:FindFirstChild("Humanoid")
-            if not hrp or not hum then return end
-
-            local mainGui = PlayerGui:FindFirstChild("Main")
-            local timerGui = mainGui and mainGui:FindFirstChild("TopHUDList") and mainGui.TopHUDList:FindFirstChild("RaidTimer")
-            local isInRaid = timerGui and timerGui.Visible
-
-            if not isInRaid then
-                local hasChip = LocalPlayer.Backpack:FindFirstChild("Special Microchip") or char:FindFirstChild("Special Microchip")
-                if not hasChip then
-                    local commF = ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("CommF_")
-                    if commF then
-                        commF:InvokeServer("RaidsNpc", "Select", getgenv().Config.SelectedChip)
-                    end
-                end
-            else
-                local targetEnemy = nil
-                local shortestDist = math.huge
-
-                for _, enemy in ipairs(workspace.Enemies:GetChildren()) do
-                    local eHum = enemy:FindFirstChild("Humanoid")
-                    local eHRP = enemy:FindFirstChild("HumanoidRootPart")
-                    if eHum and eHRP and eHum.Health > 0 then
-                        local dist = (eHRP.Position - hrp.Position).Magnitude
-                        if dist < shortestDist then
-                            shortestDist = dist
-                            targetEnemy = enemy
-                        end
-                    end
-                end
-
-                if targetEnemy then
-                    if getgenv().Config.AutoEquip then
-                        EquipWeapon(getgenv().Config.Weapon)
-                    end
-                    hum.PlatformStand = true
-                    hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-                    hrp.CFrame = targetEnemy.HumanoidRootPart.CFrame * CFrame.new(0, getgenv().Config.HoverHeight, 0) * CFrame.Angles(math.rad(-90), 0, 0)
-                    CastSkills()
-                end
-            end
-        end)
-    end
-end)
-
-task.spawn(function()
-    while task.wait(0.2) do
-        pcall(function()
-            if not getgenv().Config.AutoSeaBeast then return end
-
-            local char = LocalPlayer.Character
-            local hrp = char and char:FindFirstChild("HumanoidRootPart")
-            local hum = char and char:FindFirstChild("Humanoid")
-            if not hrp or not hum then return end
-
-            local seaBeastsFolder = workspace:FindFirstChild("SeaBeasts")
-            local activeBeast = nil
-
-            if seaBeastsFolder then
-                for _, beast in ipairs(seaBeastsFolder:GetChildren()) do
-                    if beast:FindFirstChild("HumanoidRootPart") and beast:FindFirstChild("Health") and beast.Health.Value > 0 then
-                        activeBeast = beast
-                        break
-                    end
-                end
-            end
-
-            if activeBeast then
-                if getgenv().Config.AutoEquip then
-                    EquipWeapon(getgenv().Config.Weapon)
-                end
-                hum.PlatformStand = true
-                hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-                hrp.CFrame = activeBeast.HumanoidRootPart.CFrame * CFrame.new(0, 50, 0) * CFrame.Angles(math.rad(-90), 0, 0)
-                CastSkills()
-            end
-        end)
-    end
-end)
-
-task.spawn(function()
-    while task.wait(1) do
-        if getgenv().Config.AutoStats then
-            pcall(function()
-                local CommF = ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("CommF_")
-                if CommF then
-                    CommF:InvokeServer("AddPoint", getgenv().Config.StatTarget, 1)
-                end
-            end)
-        end
-    end
-end)
-
-task.spawn(function()
-    while task.wait(0.2) do
-        pcall(function()
-            local char = LocalPlayer.Character
-            local hum = char and char:FindFirstChild("Humanoid")
-            if not hum then return end
-
-            if getgenv().Config.WalkSpeedBoost then
-                hum.WalkSpeed = getgenv().Config.SpeedValue
-            end
-
-            if getgenv().Config.JumpPowerBoost then
-                hum.UseJumpPower = true
-                hum.JumpPower = getgenv().Config.JumpValue
-            end
-        end)
-    end
-end)
-
-UserInputService.JumpRequest:Connect(function()
-    if getgenv().Config.InfiniteJump then
-        local char = LocalPlayer.Character
-        local hum = char and char:FindFirstChildOfClass("Humanoid")
-        if hum then
-            hum:ChangeState(Enum.HumanoidStateType.Jumping)
-        end
-    end
-end)
-
-RunService.Stepped:Connect(function()
-    if getgenv().Config.NoClip then
-        local char = LocalPlayer.Character
-        if char then
-            for _, part in ipairs(char:GetDescendants()) do
-                if part:IsA("BasePart") and part.CanCollide then
-                    part.CanCollide = false
-                end
-            end
-        end
-    end
-end)
-
-local function ApplyESP(targetModel, labelText, color)
-    if not targetModel or targetModel:FindFirstChild("BananaESP_Highlight") then return end
-
-    local highlight = Instance.new("Highlight")
-    highlight.Name = "BananaESP_Highlight"
-    highlight.FillColor = color
-    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
-    highlight.FillTransparency = 0.6
-    highlight.OutlineTransparency = 0
-    highlight.Adornee = targetModel
-    highlight.Parent = targetModel
-
-    local primaryPart = targetModel:FindFirstChild("HumanoidRootPart") or targetModel:FindFirstChild("Handle") or targetModel:FindFirstChildWhichIsA("BasePart")
-    if not primaryPart then return end
-
-    local billboard = Instance.new("BillboardGui")
-    billboard.Name = "BananaESP_Tag"
-    billboard.Adornee = primaryPart
-    billboard.Size = UDim2.new(0, 150, 0, 40)
-    billboard.StudsOffset = Vector3.new(0, 3, 0)
-    billboard.AlwaysOnTop = true
-    billboard.Parent = targetModel
-
-    local textLabel = Instance.new("TextLabel")
-    textLabel.Name = "InfoLabel"
-    textLabel.Size = UDim2.new(1, 0, 1, 0)
-    textLabel.BackgroundTransparency = 1
-    textLabel.Text = labelText
-    textLabel.TextColor3 = color
-    textLabel.TextStrokeTransparency = 0.3
-    textLabel.Font = Enum.Font.GothamBold
-    textLabel.TextSize = 12
-    textLabel.Parent = billboard
-end
-
-local function ClearESP(targetModel)
-    if not targetModel then return end
-    local hl = targetModel:FindFirstChild("BananaESP_Highlight")
-    local tag = targetModel:FindFirstChild("BananaESP_Tag")
-    if hl then hl:Destroy() end
-    if tag then tag:Destroy() end
-end
-
-task.spawn(function()
-    while task.wait(0.5) do
-        pcall(function()
-            local localChar = LocalPlayer.Character
-            local localHRP = localChar and localChar:FindFirstChild("HumanoidRootPart")
-
-            for _, player in ipairs(Players:GetPlayers()) do
-                if player ~= LocalPlayer and player.Character then
-                    local char = player.Character
-                    local hrp = char:FindFirstChild("HumanoidRootPart")
-
-                    if getgenv().Config.PlayerESP and hrp and localHRP then
-                        local dist = math.floor((hrp.Position - localHRP.Position).Magnitude)
-                        local displayText = string.format("%s [%d m]", player.Name, dist)
-
-                        if not char:FindFirstChild("BananaESP_Highlight") then
-                            ApplyESP(char, displayText, Color3.fromRGB(255, 215, 0))
-                        else
-                            local tag = char:FindFirstChild("BananaESP_Tag")
-                            if tag and tag:FindFirstChild("InfoLabel") then
-                                tag.InfoLabel.Text = displayText
-                            end
-                        end
-                    else
-                        ClearESP(char)
-                    end
-                end
-            end
-        end)
-    end
-end)
-
-local ActiveTween = nil
-local function TweenTo(targetCFrame)
-    local char = LocalPlayer.Character
-    local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
-
-    if ActiveTween then ActiveTween:Cancel() end
-    local distance = (targetCFrame.Position - hrp.Position).Magnitude
-    local duration = distance / getgenv().Config.TweenSpeed
-
-    if duration <= 0.1 then
-        hrp.CFrame = targetCFrame
-        return
-    end
-
-    ActiveTween = TweenService:Create(hrp, TweenInfo.new(duration, Enum.EasingStyle.Linear), {CFrame = targetCFrame})
-    ActiveTween:Play()
-end
-
-local function RejoinServer()
-    TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
 end
 
 if PlayerGui:FindFirstChild("BananaHubCompleteUI") then
@@ -825,53 +262,69 @@ ToggleStroke.Color = Color3.fromRGB(255, 215, 0)
 ToggleStroke.Thickness = 2
 
 local AutoFarmTouchBtn = Instance.new("TextButton")
-AutoFarmTouchBtn.Size = UDim2.new(0, 95, 0, 36)
-AutoFarmTouchBtn.Position = UDim2.new(0.85, -100, 0.22, 0)
-AutoFarmTouchBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+AutoFarmTouchBtn.Size = UDim2.new(0, 110, 0, 40)
+AutoFarmTouchBtn.Position = UDim2.new(0.85, -110, 0.20, 0)
+AutoFarmTouchBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 AutoFarmTouchBtn.Text = "Farm: OFF"
 AutoFarmTouchBtn.TextColor3 = Color3.fromRGB(180, 180, 180)
 AutoFarmTouchBtn.Font = Enum.Font.GothamBold
-AutoFarmTouchBtn.TextSize = 11
+AutoFarmTouchBtn.TextSize = 12
 AutoFarmTouchBtn.Active = true
 AutoFarmTouchBtn.Draggable = true
 AutoFarmTouchBtn.Parent = ScreenGui
-Instance.new("UICorner", AutoFarmTouchBtn).CornerRadius = UDim.new(0, 6)
+Instance.new("UICorner", AutoFarmTouchBtn).CornerRadius = UDim.new(0, 8)
+local AutoFarmStroke = Instance.new("UIStroke", AutoFarmTouchBtn)
+AutoFarmStroke.Color = Color3.fromRGB(80, 80, 80)
+AutoFarmStroke.Thickness = 1.5
 
 AutoFarmTouchBtn.MouseButton1Click:Connect(function()
     getgenv().Config.AutoFarm = not getgenv().Config.AutoFarm
-    if getgenv().Config.AutoFarm then
-        AutoFarmTouchBtn.BackgroundColor3 = Color3.fromRGB(255, 215, 0)
-        AutoFarmTouchBtn.TextColor3 = Color3.fromRGB(15, 15, 15)
+    local state = getgenv().Config.AutoFarm
+    local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    
+    if state then
+        TweenService:Create(AutoFarmTouchBtn, tweenInfo, {BackgroundColor3 = Color3.fromRGB(255, 215, 0)}):Play()
+        TweenService:Create(AutoFarmTouchBtn, tweenInfo, {TextColor3 = Color3.fromRGB(15, 15, 15)}):Play()
+        TweenService:Create(AutoFarmStroke, tweenInfo, {Color = Color3.fromRGB(255, 255, 255)}):Play()
         AutoFarmTouchBtn.Text = "Farm: ON"
     else
-        AutoFarmTouchBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-        AutoFarmTouchBtn.TextColor3 = Color3.fromRGB(180, 180, 180)
+        TweenService:Create(AutoFarmTouchBtn, tweenInfo, {BackgroundColor3 = Color3.fromRGB(25, 25, 25)}):Play()
+        TweenService:Create(AutoFarmTouchBtn, tweenInfo, {TextColor3 = Color3.fromRGB(180, 180, 180)}):Play()
+        TweenService:Create(AutoFarmStroke, tweenInfo, {Color = Color3.fromRGB(80, 80, 80)}):Play()
         AutoFarmTouchBtn.Text = "Farm: OFF"
     end
 end)
 
 local FastAttackTouchBtn = Instance.new("TextButton")
-FastAttackTouchBtn.Size = UDim2.new(0, 95, 0, 36)
-FastAttackTouchBtn.Position = UDim2.new(0.85, -100, 0.31, 0)
-FastAttackTouchBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+FastAttackTouchBtn.Size = UDim2.new(0, 110, 0, 40)
+FastAttackTouchBtn.Position = UDim2.new(0.85, -110, 0.30, 0)
+FastAttackTouchBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 FastAttackTouchBtn.Text = "Attack: OFF"
 FastAttackTouchBtn.TextColor3 = Color3.fromRGB(180, 180, 180)
 FastAttackTouchBtn.Font = Enum.Font.GothamBold
-FastAttackTouchBtn.TextSize = 11
+FastAttackTouchBtn.TextSize = 12
 FastAttackTouchBtn.Active = true
 FastAttackTouchBtn.Draggable = true
 FastAttackTouchBtn.Parent = ScreenGui
-Instance.new("UICorner", FastAttackTouchBtn).CornerRadius = UDim.new(0, 6)
+Instance.new("UICorner", FastAttackTouchBtn).CornerRadius = UDim.new(0, 8)
+local FastAttackStroke = Instance.new("UIStroke", FastAttackTouchBtn)
+FastAttackStroke.Color = Color3.fromRGB(80, 80, 80)
+FastAttackStroke.Thickness = 1.5
 
 FastAttackTouchBtn.MouseButton1Click:Connect(function()
     getgenv().Config.FastAttack = not getgenv().Config.FastAttack
-    if getgenv().Config.FastAttack then
-        FastAttackTouchBtn.BackgroundColor3 = Color3.fromRGB(255, 215, 0)
-        FastAttackTouchBtn.TextColor3 = Color3.fromRGB(15, 15, 15)
+    local state = getgenv().Config.FastAttack
+    local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    
+    if state then
+        TweenService:Create(FastAttackTouchBtn, tweenInfo, {BackgroundColor3 = Color3.fromRGB(255, 215, 0)}):Play()
+        TweenService:Create(FastAttackTouchBtn, tweenInfo, {TextColor3 = Color3.fromRGB(15, 15, 15)}):Play()
+        TweenService:Create(FastAttackStroke, tweenInfo, {Color = Color3.fromRGB(255, 255, 255)}):Play()
         FastAttackTouchBtn.Text = "Attack: ON"
     else
-        FastAttackTouchBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-        FastAttackTouchBtn.TextColor3 = Color3.fromRGB(180, 180, 180)
+        TweenService:Create(FastAttackTouchBtn, tweenInfo, {BackgroundColor3 = Color3.fromRGB(25, 25, 25)}):Play()
+        TweenService:Create(FastAttackTouchBtn, tweenInfo, {TextColor3 = Color3.fromRGB(180, 180, 180)}):Play()
+        TweenService:Create(FastAttackStroke, tweenInfo, {Color = Color3.fromRGB(80, 80, 80)}):Play()
         FastAttackTouchBtn.Text = "Attack: OFF"
     end
 end)
@@ -990,12 +443,13 @@ local FarmTab = CreateTab("Farm")
 local EventsTab = CreateTab("Events")
 local SeaEventTab = CreateTab("Sea Event")
 local RaceTab = CreateTab("Race V4")
-local QuestsTab = CreateTab("Quests/Items")
+local QuestsTab = CreateTab("Quests")
 local StatsTab = CreateTab("Stats")
 local PlayerTab = CreateTab("Player")
 local VisualsTab = CreateTab("Visuals")
 local MiscTab = CreateTab("Teleport")
 
+-- Tích hợp hiệu ứng chuyển màu mượt mà (Tween) cho các Toggle UI trong Menu chính
 local function AddToggle(parent, text, configKey)
     local Frame = Instance.new("Frame")
     Frame.Size = UDim2.new(1, -6, 0, 36)
@@ -1017,9 +471,9 @@ local function AddToggle(parent, text, configKey)
     local Button = Instance.new("TextButton")
     Button.Size = UDim2.new(0, 50, 0, 22)
     Button.Position = UDim2.new(1, -58, 0.5, -11)
-    Button.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-    Button.Text = "OFF"
-    Button.TextColor3 = Color3.fromRGB(180, 180, 180)
+    Button.BackgroundColor3 = getgenv().Config[configKey] and Color3.fromRGB(255, 215, 0) or Color3.fromRGB(40, 40, 40)
+    Button.Text = getgenv().Config[configKey] and "ON" or "OFF"
+    Button.TextColor3 = getgenv().Config[configKey] and Color3.fromRGB(15, 15, 15) or Color3.fromRGB(180, 180, 180)
     Button.Font = Enum.Font.GothamBold
     Button.TextSize = 10
     Button.Parent = Frame
@@ -1028,34 +482,36 @@ local function AddToggle(parent, text, configKey)
     Button.MouseButton1Click:Connect(function()
         getgenv().Config[configKey] = not getgenv().Config[configKey]
         local state = getgenv().Config[configKey]
+        local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+        
         if state then
-            Button.BackgroundColor3 = Color3.fromRGB(255, 215, 0)
-            Button.TextColor3 = Color3.fromRGB(15, 15, 15)
+            TweenService:Create(Button, tweenInfo, {BackgroundColor3 = Color3.fromRGB(255, 215, 0)}):Play()
+            TweenService:Create(Button, tweenInfo, {TextColor3 = Color3.fromRGB(15, 15, 15)}):Play()
             Button.Text = "ON"
         else
-            Button.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-            Button.TextColor3 = Color3.fromRGB(180, 180, 180)
+            TweenService:Create(Button, tweenInfo, {BackgroundColor3 = Color3.fromRGB(40, 40, 40)}):Play()
+            TweenService:Create(Button, tweenInfo, {TextColor3 = Color3.fromRGB(180, 180, 180)}):Play()
             Button.Text = "OFF"
         end
 
         if configKey == "AutoFarm" then
             if state then
-                AutoFarmTouchBtn.BackgroundColor3 = Color3.fromRGB(255, 215, 0)
-                AutoFarmTouchBtn.TextColor3 = Color3.fromRGB(15, 15, 15)
+                TweenService:Create(AutoFarmTouchBtn, tweenInfo, {BackgroundColor3 = Color3.fromRGB(255, 215, 0)}):Play()
+                TweenService:Create(AutoFarmTouchBtn, tweenInfo, {TextColor3 = Color3.fromRGB(15, 15, 15)}):Play()
                 AutoFarmTouchBtn.Text = "Farm: ON"
             else
-                AutoFarmTouchBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-                AutoFarmTouchBtn.TextColor3 = Color3.fromRGB(180, 180, 180)
+                TweenService:Create(AutoFarmTouchBtn, tweenInfo, {BackgroundColor3 = Color3.fromRGB(25, 25, 25)}):Play()
+                TweenService:Create(AutoFarmTouchBtn, tweenInfo, {TextColor3 = Color3.fromRGB(180, 180, 180)}):Play()
                 AutoFarmTouchBtn.Text = "Farm: OFF"
             end
         elseif configKey == "FastAttack" then
             if state then
-                FastAttackTouchBtn.BackgroundColor3 = Color3.fromRGB(255, 215, 0)
-                FastAttackTouchBtn.TextColor3 = Color3.fromRGB(15, 15, 15)
+                TweenService:Create(FastAttackTouchBtn, tweenInfo, {BackgroundColor3 = Color3.fromRGB(255, 215, 0)}):Play()
+                TweenService:Create(FastAttackTouchBtn, tweenInfo, {TextColor3 = Color3.fromRGB(15, 15, 15)}):Play()
                 FastAttackTouchBtn.Text = "Attack: ON"
             else
-                FastAttackTouchBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-                FastAttackTouchBtn.TextColor3 = Color3.fromRGB(180, 180, 180)
+                TweenService:Create(FastAttackTouchBtn, tweenInfo, {BackgroundColor3 = Color3.fromRGB(25, 25, 25)}):Play()
+                TweenService:Create(FastAttackTouchBtn, tweenInfo, {TextColor3 = Color3.fromRGB(180, 180, 180)}):Play()
                 FastAttackTouchBtn.Text = "Attack: OFF"
             end
         end
@@ -1268,12 +724,135 @@ AddButton(MiscTab, "Instant Teleport", function()
         char.HumanoidRootPart.CFrame = targetCF
     end
 end)
-AddButton(MiscTab, "Rejoin Server", RejoinServer)
+AddButton(MiscTab, "Rejoin Server", function()
+    TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
+end)
 
 ToggleButton.MouseButton1Click:Connect(function()
     MainFrame.Visible = not MainFrame.Visible
 end)
 
 LocalPlayer.Idled:Connect(function()
-    VirtualUser:CaptureController()
-    VirtualUser:ClickButton2(Vector2.new())
+    if getgenv().Config.AntiAFK then
+        VirtualUser:CaptureController()
+        VirtualUser:ClickButton2(Vector2.new())
+    end
+end)
+
+task.spawn(function()
+    while true do
+        pcall(function()
+            if getgenv().Config.FastAttack and CombatFrameworkR then
+                local AC = CombatFrameworkR.activeController
+                if AC and AC.equipped then
+                    AC.attacking = false
+                    AC.blocking = false
+                    AC.timeToNextAttack = 0
+                    AC.timeToNextBlock = 0
+                    AC.increment = 3
+                    AC.hitboxMagnitude = getgenv().Config.HitboxSize
+                    local blade = GetCurrentBlade()
+                    if blade then AC:attack() end
+                end
+                local Net = ReplicatedStorage:FindFirstChild("Modules") and ReplicatedStorage.Modules:FindFirstChild("Net")
+                if Net and Net:FindFirstChild("RE/RegisterAttack") then
+                    Net["RE/RegisterAttack"]:FireServer(0)
+                end
+            end
+        end)
+        task.wait(getgenv().Config.AttackDelay)
+    end
+end)
+
+task.spawn(function()
+    while task.wait(0.5) do
+        pcall(function()
+            if not getgenv().Config.AutoQuest then 
+                QuestState.CurrentMobName = ""
+                QuestState.CurrentMobCFrame = nil
+                return 
+            end
+            local questData = GetQuestDataByLevel()
+            if not questData then return end
+            QuestState.CurrentMobName = questData.MobName
+            QuestState.CurrentMobCFrame = questData.Mob_CFrame
+
+            local mainGui = PlayerGui:FindFirstChild("Main")
+            local questFrame = mainGui and mainGui:FindFirstChild("Quest")
+            if questFrame and not questFrame.Visible then
+                local char = LocalPlayer.Character
+                local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    if (hrp.Position - questData.NPC_CFrame.Position).Magnitude > 15 then
+                        TweenTo(questData.NPC_CFrame)
+                    else
+                        StopTween()
+                        local CommF = ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("CommF_")
+                        if CommF then CommF:InvokeServer("StartQuest", questData.QuestName, questData.QuestIndex) end
+                    end
+                end
+            elseif questFrame and questFrame.Visible then
+                local container = questFrame:FindFirstChild("Container")
+                local questTitle = container and container:FindFirstChild("QuestTitle")
+                local titleLabel = questTitle and questTitle:FindFirstChild("Title")
+                if titleLabel and not string.find(titleLabel.Text, questData.MobName) then
+                    local CommF = ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("CommF_")
+                    if CommF then CommF:InvokeServer("AbandonQuest") end
+                end
+            end
+        end)
+    end
+end)
+
+task.spawn(function()
+    while task.wait() do
+        pcall(function()
+            local char = LocalPlayer.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            local humanoid = char and char:FindFirstChild("Humanoid")
+            if not hrp or not humanoid then return end
+
+            if getgenv().Config.AutoFarm then
+                local mainGui = PlayerGui:FindFirstChild("Main")
+                local questFrame = mainGui and mainGui:FindFirstChild("Quest")
+                if getgenv().Config.AutoQuest and questFrame and not questFrame.Visible then return end
+
+                if getgenv().Config.AutoEquip then
+                    EquipWeapon(getgenv().Config.Weapon)
+                end
+
+                local target = nil
+                local shortestDist = math.huge
+                for _, enemy in pairs(workspace.Enemies:GetChildren()) do
+                    local enemyHum = enemy:FindFirstChild("Humanoid")
+                    local enemyHRP = enemy:FindFirstChild("HumanoidRootPart")
+                    if enemyHum and enemyHRP and enemyHum.Health > 0 then
+                        local isValid = (not getgenv().Config.AutoQuest) or (QuestState.CurrentMobName == "") or (enemy.Name == QuestState.CurrentMobName)
+                        if isValid then
+                            local dist = (enemyHRP.Position - hrp.Position).Magnitude
+                            if dist < shortestDist then
+                                shortestDist = dist
+                                target = enemy
+                            end
+                        end
+                    end
+                end
+
+                if target and target:FindFirstChild("HumanoidRootPart") then
+                    humanoid.PlatformStand = true
+                    hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                    hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+                    hrp.CFrame = target.HumanoidRootPart.CFrame * CFrame.new(0, getgenv().Config.HoverHeight, 0) * CFrame.Angles(math.rad(-90), 0, 0)
+                elseif getgenv().Config.AutoQuest and QuestState.CurrentMobCFrame then
+                    humanoid.PlatformStand = true
+                    hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                    hrp.CFrame = QuestState.CurrentMobCFrame * CFrame.new(0, getgenv().Config.HoverHeight, 0)
+                else
+                    humanoid.PlatformStand = false
+                end
+            else
+                if humanoid.PlatformStand then humanoid.PlatformStand = false end
+            end
+        end)
+    end
+end)
