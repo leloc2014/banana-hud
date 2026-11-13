@@ -1,16 +1,34 @@
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local VirtualUser = game:GetService("VirtualUser")
-local VirtualInputManager = game:GetService("VirtualInputManager")
-local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
-local TeleportService = game:GetService("TeleportService")
-local Lighting = game:GetService("Lighting")
+local success, Fluent = pcall(function()
+    return loadstring(game:loadstring(game:HttpGe("https://raw.githubusercontent.com/leloc2014/banana-hud.lud/c8dd33c6cae1559cc72fe156fd03344797159af0/banana%20hud.lua"))()
+end)
 
-local LocalPlayer = Players.LocalPlayer
-local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+if not success or not Fluent then return end
 
+local Window = Fluent:CreateWindow({
+    Title = "Banana Hub 🍌 [Complete Video Edition]",
+    SubTitle = "Blox Fruits Final Config",
+    TabWidth = 160,
+    Size = UDim2.fromOffset(580, 420),
+    Acrylic = false,
+    Theme = "Dark",
+    MinimizeKey = Enum.KeyCode.LeftControl
+})
+
+local ScreenGui = Instance.new("ScreenGui", game:GetService("CoreGui"))
+local ToggleBtn = Instance.new("TextButton", ScreenGui)
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(255, 210, 0)
+ToggleBtn.Position = UDim2.new(0, 15, 0.4, 0)
+ToggleBtn.Size = UDim2.new(0, 50, 0, 50)
+ToggleBtn.Font = Enum.Font.GothamBold
+ToggleBtn.Text = "BANANA"
+ToggleBtn.TextColor3 = Color3.fromRGB(20, 20, 20)
+ToggleBtn.TextSize = 10
+ToggleBtn.Draggable = true
+Instance.new("UICorner", ToggleBtn).CornerRadius = UDim.new(1, 0)
+
+ToggleBtn.MouseButton1Click:Connect(function()
+    Window:Minimize()
+end)
 getgenv().Config = {
     FastAttack = false,
     AttackDelay = 0.04,
